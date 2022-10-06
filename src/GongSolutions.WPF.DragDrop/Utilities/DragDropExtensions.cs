@@ -9,7 +9,7 @@ namespace GongSolutions.Wpf.DragDrop.Utilities
     public static class DragDropExtensions
     {
         /// <summary>
-        /// Determines whether the given element is ignored on drag start (<see cref="DragDrop.DragSourceIgnore"/>).
+        /// Determines whether the given element is ignored on drag start (<see cref="DragDrop.DragSourceIgnoreProperty"/>).
         /// </summary>
         /// <param name="element">The given element.</param>
         /// <returns>Element is ignored or not.</returns>
@@ -19,7 +19,7 @@ namespace GongSolutions.Wpf.DragDrop.Utilities
         }
 
         /// <summary>
-        /// Determines whether the given element is ignored on drop action (<see cref="DragDrop.IsDragSource"/>).
+        /// Determines whether the given element is ignored on drop action (<see cref="DragDrop.IsDragSourceProperty"/>).
         /// </summary>
         /// <param name="element">The given element.</param>
         /// <returns>Element is ignored or not.</returns>
@@ -29,7 +29,7 @@ namespace GongSolutions.Wpf.DragDrop.Utilities
         }
 
         /// <summary>
-        /// Determines whether the given element is ignored on drop action (<see cref="DragDrop.IsDropTarget"/>).
+        /// Determines whether the given element is ignored on drop action (<see cref="DragDrop.IsDropTargetProperty"/>).
         /// </summary>
         /// <param name="element">The given element.</param>
         /// <returns>Element is ignored or not.</returns>
@@ -52,7 +52,7 @@ namespace GongSolutions.Wpf.DragDrop.Utilities
 
             var relativeItemPosition = element.TranslatePoint(new Point(0, 0), relativeToElement);
             var relativeDropPosition = new Point(dropPosition.X - relativeItemPosition.X, dropPosition.Y - relativeItemPosition.Y);
-            return VisualTreeHelper.GetDescendantBounds(element).Contains(relativeDropPosition);
+            return VisualTreeExtensions.GetVisibleDescendantBounds(element).Contains(relativeDropPosition);
         }
 
         /// <summary>
@@ -91,19 +91,12 @@ namespace GongSolutions.Wpf.DragDrop.Utilities
             }
 
             var bounds = VisualTreeHelper.GetDescendantBounds(target);
+            var cropBounds = VisualTreeExtensions.GetVisibleDescendantBounds(target);
 
-#if NET461 || NET46 || NET452 || NET451 || NET45
-            var dpiX = DpiHelper.DpiX;
-            var dpiY = DpiHelper.DpiY;
-
-            var dpiBounds = DpiHelper.LogicalRectToDevice(bounds);
-#else
             var dpiScale = VisualTreeHelper.GetDpi(target);
             var dpiX = dpiScale.PixelsPerInchX;
             var dpiY = dpiScale.PixelsPerInchY;
-
-            var dpiBounds = DpiHelper.LogicalRectToDevice(bounds, dpiScale.DpiScaleX, dpiScale.DpiScaleY);
-#endif
+            var dpiBounds = DpiHelper.LogicalRectToDevice(cropBounds, dpiScale.DpiScaleX, dpiScale.DpiScaleY);
 
             var pixelWidth = (int)Math.Ceiling(dpiBounds.Width);
             var pixelHeight = (int)Math.Ceiling(dpiBounds.Height);
@@ -118,11 +111,15 @@ namespace GongSolutions.Wpf.DragDrop.Utilities
             using (var ctx = dv.RenderOpen())
             {
                 var vb = new VisualBrush(target);
+
+                // vb.ViewportUnits = BrushMappingMode.Absolute;
+                // vb.Viewport = bounds;
+
                 if (flowDirection == FlowDirection.RightToLeft)
                 {
                     var transformGroup = new TransformGroup();
                     transformGroup.Children.Add(new ScaleTransform(-1, 1));
-                    transformGroup.Children.Add(new TranslateTransform(bounds.Size.Width - 1, 0));
+                    transformGroup.Children.Add(new TranslateTransform(bounds.Size.Width, 0));
                     ctx.PushTransform(transformGroup);
                 }
 

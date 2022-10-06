@@ -1,35 +1,28 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <IsBuildingWpfTempProj Condition="$(MSBuildProjectName.Contains('_wpftmp')) != 'true'">false</IsBuildingWpfTempProj>
+        <IsBuildingWpfTempProj Condition="$(MSBuildProjectName.Contains('_wpftmp')) == 'true'">true</IsBuildingWpfTempProj>
+    </PropertyGroup>
+
     <!-- Project properties -->
     <PropertyGroup>
-        <TargetFrameworks>net45;net46;net462;net47;netcoreapp3.0;netcoreapp3.1;net5-windows</TargetFrameworks>
+        <TargetFrameworks>net462;net47;net48;netcoreapp3.1;net5.0-windows;net6.0-windows</TargetFrameworks>
         <AppendTargetFrameworkToOutputPath>true</AppendTargetFrameworkToOutputPath>
         <GenerateDocumentationFile>false</GenerateDocumentationFile>
         <AutoGenerateBindingRedirects Condition=" $(TargetFramework.StartsWith('net4')) ">true</AutoGenerateBindingRedirects>
-        <LangVersion>8.0</LangVersion>
-        <DebugSymbols>true</DebugSymbols>
-        <DebugType>full</DebugType>
+        
+        <AnalysisLevel>latest</AnalysisLevel>
+        <LangVersion>latest</LangVersion>
+        
         <NoWarn>$(NoWarn);CS1591</NoWarn>
         <NoError>$(NoError);CS1591</NoError>
         <UseWPF>true</UseWPF>
     </PropertyGroup>
 
-    <!-- SourceLink -->
-    <PropertyGroup>
-        <!-- Optional: Declare that the Repository URL can be published to NuSpec -->
-        <PublishRepositoryUrl>true</PublishRepositoryUrl>
-        <!-- <IncludeSymbols>true</IncludeSymbols> -->
-        <!-- Optional: Embed source files that are not tracked by the source control manager to the PDB -->
-        <EmbedUntrackedSources>true</EmbedUntrackedSources>
-        <!-- Optional: Include PDB in the built .nupkg -->
-        <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
-        <!-- https://github.com/dotnet/sourcelink/blob/master/docs/README.md#embedallsources -->
-        <!-- <EmbedAllSources>true</EmbedAllSources>-->
-    </PropertyGroup>
-
     <!-- Add the references for all projects and targets -->
     <ItemGroup>
-        <PackageReference Include="JetBrains.Annotations" Version="2020.*" PrivateAssets="All" />
-        <PackageReference Include="WpfAnalyzers" Version="2.4.*" PrivateAssets="All" />
+        <PackageReference Include="JetBrains.Annotations" Version="2022.*" PrivateAssets="All" IncludeAssets="build;compile" />
+        <PackageReference Include="WpfAnalyzers" Version="4.1.*" PrivateAssets="All" />
     </ItemGroup>
 
     <ItemGroup>

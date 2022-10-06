@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -13,6 +13,8 @@ namespace GongSolutions.Wpf.DragDrop.Utilities
 {
     public static class ItemsControlExtensions
     {
+        private static FieldInfo DataGridSelectionAnchorFieldInfo { get; } = typeof(DataGrid).GetField("_selectionAnchor", BindingFlags.Instance | BindingFlags.NonPublic);
+
         public static CollectionViewGroup FindGroup(this ItemsControl itemsControl, Point position)
         {
             if (itemsControl.Items.Groups == null || itemsControl.Items.Groups.Count == 0)
@@ -242,8 +244,8 @@ namespace GongSolutions.Wpf.DragDrop.Utilities
 
         /// <summary>
         /// Gets the Orientation which will be used for the drag drop action.
-        /// Normally it will be look up to find the correct orientaion of the inner ItemsPanel,
-        /// but sometimes it's necessary to force the oreintation, if the look up is wrong.
+        /// Normally it will be look up to find the correct orientation of the inner ItemsPanel,
+        /// but sometimes it's necessary to force the orientation, if the look up is wrong.
         /// If so, the ItemsPanelOrientation value is taken.
         /// </summary>
         /// <param name="itemsControl">The ItemsControl for the look up.</param>
@@ -268,6 +270,11 @@ namespace GongSolutions.Wpf.DragDrop.Utilities
             if (itemsPresenter != null && VisualTreeHelper.GetChildrenCount(itemsPresenter) > 0)
             {
                 var itemsPanel = VisualTreeHelper.GetChild(itemsPresenter, 0);
+                if (itemsPanel is UniformGrid uniformGrid)
+                {
+                    return uniformGrid.Columns == 1 ? Orientation.Vertical : Orientation.Horizontal;
+                }
+
                 var orientationProperty = itemsPanel.GetType().GetProperty("Orientation", typeof(Orientation));
                 if (orientationProperty != null)
                 {
@@ -302,26 +309,45 @@ namespace GongSolutions.Wpf.DragDrop.Utilities
         }
 
         /// <summary>
-        /// Sets the given object as selected item at the ItemsControl.
+        /// Sets the given item as selected item at the ItemsControl.
         /// </summary>
-        /// <param name="itemsControl">The ItemsControl which contains the item.</param>
-        /// <param name="item">The object which should be selected.</param>
-        public static void SetSelectedItem(this ItemsControl itemsControl, object item)
+        /// <param name="itemsControl">The control which contains the item.</param>
+        /// <param name="item2Select">The item which should be selected.</param>
+        public static void SetSelectedItem(this ItemsControl itemsControl, object item2Select)
         {
             if (itemsControl is MultiSelector multiSelector)
             {
-                multiSelector.SetCurrentValue(Selector.SelectedItemProperty, null);
-                multiSelector.SetCurrentValue(Selector.SelectedItemProperty, item);
+                var itemsToDeselect = multiSelector.SelectedItems.Cast<object>().Where(si => si != item2Select).ToArray();
+
+                foreach (var item in itemsToDeselect)
+                {
+                    multiSelector.SelectedItems.Remove(item);
+                }
+
+                multiSelector.SetCurrentValue(Selector.SelectedItemProperty, item2Select);
+
+                if (itemsControl is DataGrid dataGrid)
+                {
+                    if (dataGrid.SelectedCells.Count > 0)
+                    {
+                        DataGridSelectionAnchorFieldInfo.SetValue(dataGrid, dataGrid.SelectedCells.Cast<DataGridCellInfo?>().FirstOrDefault(sc => sc is { IsValid: true }));
+                    }
+                }
             }
             else if (itemsControl is ListBox listBox)
             {
                 var selectionMode = listBox.SelectionMode;
+
+                if (selectionMode != SelectionMode.Single)
+                {
+                    listBox.UnselectAll();
+                }
+
                 try
                 {
                     // change SelectionMode for UpdateAnchorAndActionItem
                     listBox.SetCurrentValue(ListBox.SelectionModeProperty, SelectionMode.Single);
-                    listBox.SetCurrentValue(Selector.SelectedItemProperty, null);
-                    listBox.SetCurrentValue(Selector.SelectedItemProperty, item);
+                    listBox.SetCurrentValue(Selector.SelectedItemProperty, item2Select);
                 }
                 finally
                 {
@@ -344,7 +370,7 @@ namespace GongSolutions.Wpf.DragDrop.Utilities
 
                 // set new selected item
                 // TreeView.SelectedItemProperty is a read only property, so we must set the selection on the TreeViewItem itself
-                var newSelectedTreeViewItem = treeViewItem.ItemContainerGenerator.ContainerFromItem(item) as TreeViewItem;
+                var newSelectedTreeViewItem = treeViewItem.ItemContainerGenerator.ContainerFromItem(item2Select) as TreeViewItem;
                 newSelectedTreeViewItem?.SetCurrentValue(TreeViewItem.IsSelectedProperty, true);
             }
             else if (itemsControl is TreeView treeView)
@@ -359,13 +385,16 @@ namespace GongSolutions.Wpf.DragDrop.Utilities
 
                 // set new selected item
                 // TreeView.SelectedItemProperty is a read only property, so we must set the selection on the TreeViewItem itself
-                var newSelectedTreeViewItem = treeView.ItemContainerGenerator.ContainerFromItem(item) as TreeViewItem;
+                var newSelectedTreeViewItem = treeView.ItemContainerGenerator.ContainerFromItem(item2Select) as TreeViewItem;
                 newSelectedTreeViewItem?.SetCurrentValue(TreeViewItem.IsSelectedProperty, true);
             }
             else if (itemsControl is Selector selector)
             {
-                selector.SetCurrentValue(Selector.SelectedItemProperty, null);
-                selector.SetCurrentValue(Selector.SelectedItemProperty, item);
+                // The original issue (#21) would only have occurred for scenarios where multiple items are selected.
+                // Selector doesn't provide public APIs to allow for the selection of multiple items.
+                // So it seems that we don't need this here.
+                // selector.SetCurrentValue(Selector.SelectedItemProperty, null);
+                selector.SetCurrentValue(Selector.SelectedItemProperty, item2Select);
             }
         }
 
@@ -383,6 +412,11 @@ namespace GongSolutions.Wpf.DragDrop.Utilities
                 }
 
                 multiSelector.SetCurrentValue(Selector.SelectedItemProperty, null);
+
+                if (itemsControl is DataGrid dataGrid)
+                {
+                    DataGridSelectionAnchorFieldInfo.SetValue(dataGrid, null);
+                }
             }
             else if (itemsControl is ListBox listBox)
             {
@@ -497,6 +531,34 @@ namespace GongSolutions.Wpf.DragDrop.Utilities
                     if (itemSelected)
                     {
                         multiSelector.SelectedItem = item;
+                    }
+                }
+
+                if (itemsControl is DataGrid dataGrid)
+                {
+                    DataGridCellInfo? currentAnchorCellInfo = DataGridSelectionAnchorFieldInfo.GetValue(dataGrid) as DataGridCellInfo?;
+
+                    if (itemSelected)
+                    {
+                        DataGridCell cell = dataGrid.ItemContainerGenerator.ContainerFromItem(item)?.GetVisualDescendent<DataGridCell>();
+
+                        if (cell != null)
+                        {
+                            DataGridSelectionAnchorFieldInfo.SetValue(dataGrid, new DataGridCellInfo(cell));
+                        }
+                    }
+                    else if (dataGrid.SelectedItems.Count > 0 && dataGrid.SelectedCells.Count > 0)
+                    {
+                        // We've deselected a row but there are still selected cells.
+                        // If the cell anchor needs updating, fall back to the last valid cell, if possible.
+                        if (currentAnchorCellInfo is not { IsValid: true } || !dataGrid.SelectedCells.Contains(currentAnchorCellInfo.Value))
+                        {
+                            DataGridSelectionAnchorFieldInfo.SetValue(dataGrid, dataGrid.SelectedCells.Cast<DataGridCellInfo?>().LastOrDefault(sc => sc is { IsValid: true }));
+                        }
+                    }
+                    else if (dataGrid.SelectedItems.Count == 0 || (!currentAnchorCellInfo?.IsValid ?? true))
+                    {
+                        DataGridSelectionAnchorFieldInfo.SetValue(dataGrid, null);
                     }
                 }
             }

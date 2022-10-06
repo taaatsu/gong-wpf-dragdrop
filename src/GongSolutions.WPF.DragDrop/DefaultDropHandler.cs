@@ -61,7 +61,7 @@ namespace GongSolutions.Wpf.DragDrop
 
         public static IEnumerable ExtractData(object data)
         {
-            if (data is IEnumerable enumerable && !(enumerable is string))
+            if (data is IEnumerable enumerable and not string)
             {
                 return enumerable;
             }
@@ -138,102 +138,10 @@ namespace GongSolutions.Wpf.DragDrop
             var copyData = ((dropInfo.DragInfo.DragDropCopyKeyState != default) && dropInfo.KeyStates.HasFlag(dropInfo.DragInfo.DragDropCopyKeyState))
                            || dropInfo.DragInfo.DragDropCopyKeyState.HasFlag(DragDropKeyStates.LeftMouseButton);
             copyData = copyData
-                       && !(dropInfo.DragInfo.SourceItem is HeaderedContentControl)
-                       && !(dropInfo.DragInfo.SourceItem is HeaderedItemsControl)
-                       && !(dropInfo.DragInfo.SourceItem is ListBoxItem);
+                       && dropInfo.DragInfo.SourceItem is not HeaderedContentControl
+                       && dropInfo.DragInfo.SourceItem is not HeaderedItemsControl
+                       && dropInfo.DragInfo.SourceItem is not ListBoxItem;
             return copyData;
-        }
-
-        /// <inheritdoc />
-        public virtual void DragOver(IDropInfo dropInfo)
-        {
-            if (CanAcceptData(dropInfo))
-            {
-                var copyData = ShouldCopyData(dropInfo);
-                dropInfo.Effects = copyData ? DragDropEffects.Copy : DragDropEffects.Move;
-                var isTreeViewItem = dropInfo.InsertPosition.HasFlag(RelativeInsertPosition.TargetItemCenter) && dropInfo.VisualTargetItem is TreeViewItem;
-                dropInfo.DropTargetAdorner = isTreeViewItem ? DropTargetAdorners.Highlight : DropTargetAdorners.Insert;
-            }
-        }
-
-        /// <inheritdoc />
-        public virtual void Drop(IDropInfo dropInfo)
-        {
-            if (dropInfo?.DragInfo == null)
-            {
-                return;
-            }
-
-            var insertIndex = GetInsertIndex(dropInfo);
-            var destinationList = dropInfo.TargetCollection.TryGetList();
-            var data = ExtractData(dropInfo.Data).OfType<object>().ToList();
-            bool forceMoveBehavior = false;
-
-            var copyData = ShouldCopyData(dropInfo);
-            if (!copyData)
-            {
-                var sourceList = dropInfo.DragInfo.SourceCollection.TryGetList();
-                if (sourceList != null)
-                {
-                    forceMoveBehavior = sourceList.IsSameObservableCollection(destinationList);
-                    if (!forceMoveBehavior)
-                    {
-                        foreach (var o in data)
-                        {
-                            var index = sourceList.IndexOf(o);
-                            if (index != -1)
-                            {
-                                sourceList.RemoveAt(index);
-
-                                // If source is destination too fix the insertion index
-                                if (destinationList != null && ReferenceEquals(sourceList, destinationList) && index < insertIndex)
-                                {
-                                    --insertIndex;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (destinationList != null)
-            {
-                var objects2Insert = new List<object>();
-
-                // check for cloning
-                var cloneData = dropInfo.Effects.HasFlag(DragDropEffects.Copy) || dropInfo.Effects.HasFlag(DragDropEffects.Link);
-
-                foreach (var o in data)
-                {
-                    var obj2Insert = o;
-                    if (cloneData)
-                    {
-                        if (o is ICloneable cloneable)
-                        {
-                            obj2Insert = cloneable.Clone();
-                        }
-                    }
-
-                    objects2Insert.Add(obj2Insert);
-
-                    if (!cloneData && forceMoveBehavior)
-                    {
-                        var index = destinationList.IndexOf(o);
-                        if (insertIndex > index)
-                        {
-                            insertIndex--;
-                        }
-
-                        Move(destinationList, index, insertIndex++);
-                    }
-                    else
-                    {
-                        destinationList.Insert(insertIndex++, obj2Insert);
-                    }
-                }
-
-                SelectDroppedItems(dropInfo, objects2Insert);
-            }
         }
 
         protected static int GetInsertIndex(IDropInfo dropInfo)
@@ -266,8 +174,11 @@ namespace GongSolutions.Wpf.DragDrop
                 throw new ArgumentException("ObservableCollection<T> was expected", nameof(list));
             }
 
-            var method = list.GetType().GetMethod("Move", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
-            method.Invoke(list, new object[] { sourceIndex, destinationIndex });
+            if (sourceIndex != destinationIndex)
+            {
+                var method = list.GetType().GetMethod("Move", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+                _ = method?.Invoke(list, new object[] { sourceIndex, destinationIndex });
+            }
         }
 
         protected static bool IsChildOf(UIElement targetItem, UIElement sourceItem)
@@ -302,7 +213,127 @@ namespace GongSolutions.Wpf.DragDrop
             }
             else
             {
-                return target is IList || target is ICollectionView;
+                return target is IList or ICollectionView;
+            }
+        }
+
+#if !NETCOREAPP3_1_OR_GREATER
+        /// <inheritdoc />
+        public void DragEnter(IDropInfo dropInfo)
+        {
+            // nothing here
+        }
+#endif
+
+        /// <inheritdoc />
+        public virtual void DragOver(IDropInfo dropInfo)
+        {
+            if (CanAcceptData(dropInfo))
+            {
+                var copyData = ShouldCopyData(dropInfo);
+                dropInfo.Effects = copyData ? DragDropEffects.Copy : DragDropEffects.Move;
+                var isTreeViewItem = dropInfo.InsertPosition.HasFlag(RelativeInsertPosition.TargetItemCenter) && dropInfo.VisualTargetItem is TreeViewItem;
+                dropInfo.DropTargetAdorner = isTreeViewItem ? DropTargetAdorners.Highlight : DropTargetAdorners.Insert;
+            }
+        }
+
+#if !NETCOREAPP3_1_OR_GREATER
+        /// <inheritdoc />
+        public void DragLeave(IDropInfo dropInfo)
+        {
+            // nothing here
+        }
+#endif
+
+        /// <inheritdoc />
+        public virtual void Drop(IDropInfo dropInfo)
+        {
+            if (dropInfo?.DragInfo == null)
+            {
+                return;
+            }
+
+            var insertIndex = GetInsertIndex(dropInfo);
+            var destinationList = dropInfo.TargetCollection.TryGetList();
+            var data = ExtractData(dropInfo.Data).OfType<object>().ToList();
+            bool isSameCollection = false;
+
+            var copyData = ShouldCopyData(dropInfo);
+            if (!copyData)
+            {
+                var sourceList = dropInfo.DragInfo.SourceCollection.TryGetList();
+                if (sourceList != null)
+                {
+                    isSameCollection = sourceList.IsSameObservableCollection(destinationList);
+                    if (!isSameCollection)
+                    {
+                        foreach (var o in data)
+                        {
+                            var index = sourceList.IndexOf(o);
+                            if (index != -1)
+                            {
+                                sourceList.RemoveAt(index);
+
+                                // If source is destination too fix the insertion index
+                                if (destinationList != null && ReferenceEquals(sourceList, destinationList) && index < insertIndex)
+                                {
+                                    --insertIndex;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (destinationList != null)
+            {
+                var objects2Insert = new List<object>();
+
+                // check for cloning
+                var cloneData = dropInfo.Effects.HasFlag(DragDropEffects.Copy) || dropInfo.Effects.HasFlag(DragDropEffects.Link);
+
+                foreach (var o in data)
+                {
+                    var obj2Insert = o;
+                    if (cloneData)
+                    {
+                        if (o is ICloneableDragItem cloneableItem)
+                        {
+                            obj2Insert = cloneableItem.CloneItem(dropInfo);
+                        }
+                        else if (o is ICloneable cloneable)
+                        {
+                            obj2Insert = cloneable.Clone();
+                        }
+                    }
+
+                    objects2Insert.Add(obj2Insert);
+
+                    if (!cloneData && isSameCollection)
+                    {
+                        var index = destinationList.IndexOf(o);
+                        if (index != -1)
+                        {
+                            if (insertIndex > index)
+                            {
+                                insertIndex--;
+                            }
+
+                            Move(destinationList, index, insertIndex++);
+                        }
+                    }
+                    else
+                    {
+                        destinationList.Insert(insertIndex++, obj2Insert);
+                    }
+
+                    if (obj2Insert is IDragItemSource dragItemSource)
+                    {
+                        dragItemSource.ItemDropped(dropInfo);
+                    }
+                }
+
+                SelectDroppedItems(dropInfo, objects2Insert);
             }
         }
     }
