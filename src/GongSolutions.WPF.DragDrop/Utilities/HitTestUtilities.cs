@@ -13,7 +13,9 @@ namespace GongSolutions.Wpf.DragDrop.Utilities
             where T : UIElement
         {
             var uiElement = GetHitTestElement4Type<T>(sender, elementPosition);
-            return uiElement != null && uiElement.Visibility == Visibility.Visible;
+            //Jumon:HitTestVisibleがfalseなら、表示されていても無視するべきである
+            return uiElement != null && uiElement.Visibility == Visibility.Visible && uiElement.IsHitTestVisible;
+            //return uiElement != null && uiElement.Visibility == Visibility.Visible;
         }
 
         private static T GetHitTestElement4Type<T>(object sender, Point elementPosition)

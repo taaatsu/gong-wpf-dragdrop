@@ -90,7 +90,9 @@ namespace GongSolutions.Wpf.DragDrop.Utilities
         {
             return collection != null
                    && collection.GetType().IsGenericType
-                   && collection.GetType().GetGenericTypeDefinition() == typeof(ObservableCollection<>);
+                   //&& collection.GetType().GetGenericTypeDefinition() == typeof(ObservableCollection<>);
+                   && collection.GetType().IsSubclassOfRawGeneric(typeof(ObservableCollection<>));
+            //ObservableCollection<>から派生したクラスでも対応できるように変更
         }
 
         /// <summary>
@@ -104,6 +106,28 @@ namespace GongSolutions.Wpf.DragDrop.Utilities
             return collection1 != null
                    && ReferenceEquals(collection1, collection2)
                    && collection1.IsObservableCollection();
+        }
+
+
+        /// <summary>
+        /// toCheckが、genericから派生してるかどうか調べる
+        /// IsSubclassのジェネリック対応版となる
+        /// </summary>
+        /// <param name="generic"></param>
+        /// <param name="toCheck"></param>
+        /// <returns></returns>
+        static bool IsSubclassOfRawGeneric(this Type toCheck, Type generic)
+        {
+            while (toCheck != null && toCheck != typeof(object))
+            {
+                var cur = toCheck.IsGenericType ? toCheck.GetGenericTypeDefinition() : toCheck;
+                if (generic == cur)
+                {
+                    return true;
+                }
+                toCheck = toCheck.BaseType;
+            }
+            return false;
         }
     }
 }
